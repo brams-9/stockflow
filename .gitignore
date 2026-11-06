@@ -27,7 +27,18 @@ go.work.sum
 
 # env file
 .env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# OS
+.DS_Store
