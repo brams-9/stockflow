@@ -15,6 +15,15 @@ services:
       timeout: 3s
       retries: 10
 
+  migrate:
+    image: migrate/migrate:v4.18.1
+    volumes:
+      - ./db/migrations:/migrations
+    command: ["-path", "/migrations", "-database", "postgres://stockflow:stockflow@db:5432/stockflow?sslmode=disable", "up"]
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build: .
     environment:
@@ -25,6 +34,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
