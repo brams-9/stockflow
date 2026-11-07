@@ -3,6 +3,10 @@ import { apiErrorSchema, errorCodes } from '../types/api'
 
 const baseUrl: string = import.meta.env.VITE_API_BASE_URL ?? ''
 
+const unavailableMessage = 'Server is unavailable, try again'
+
+const gatewayStatuses = [502, 503, 504]
+
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE'
 
 type QueryValue = string | number | boolean | undefined | null
@@ -68,11 +72,11 @@ const parseErrorBody = async (res: Response) => {
 
 const toApiError = async (res: Response) => {
   const parsed = await parseErrorBody(res)
-  if (!parsed?.success) {
+  if (!parsed?.success || gatewayStatuses.includes(res.status)) {
     return new ApiError({
       status: res.status,
       code: errorCodes.unknown,
-      message: res.statusText || 'Unexpected error',
+      message: unavailableMessage,
     })
   }
   const { code, message, fields, sku, available } = parsed.data.error
@@ -104,7 +108,7 @@ export async function request<T extends z.ZodType>({
     throw new ApiError({
       status: 0,
       code: errorCodes.network,
-      message: 'Unable to reach the server',
+      message: unavailableMessage,
     })
   }
 

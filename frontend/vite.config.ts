@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 const target = process.env.API_TARGET ?? 'http://localhost:8080'
 
@@ -12,5 +12,8 @@ export default defineConfig({
       '/api': target,
       '/health': target,
     },
+  },
+  test: {
+    environment: 'jsdom',
   },
 })
