@@ -45,6 +45,8 @@ func mapError(err error, c echo.Context) (int, dto.ErrorResponse) {
 		return nethttp.StatusNotFound, dto.NewErrorResponse("ORDER_NOT_FOUND", "order not found", nil)
 	case errors.Is(err, domain.ErrOrderAlreadyCancelled):
 		return nethttp.StatusConflict, dto.NewErrorResponse("ORDER_ALREADY_CANCELLED", "order is already cancelled", nil)
+	case errors.Is(err, domain.ErrIdempotencyKeyReused):
+		return nethttp.StatusUnprocessableEntity, dto.NewErrorResponse("IDEMPOTENCY_KEY_REUSED", "this idempotency key was already used with a different request", nil)
 	case errors.As(err, &httpErr) && httpErr.Code == nethttp.StatusNotFound:
 		return nethttp.StatusNotFound, dto.NewErrorResponse("NOT_FOUND", "resource not found", nil)
 	case errors.As(err, &httpErr) && httpErr.Code == nethttp.StatusMethodNotAllowed:

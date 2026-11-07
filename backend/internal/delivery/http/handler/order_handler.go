@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"stockflow/internal/delivery/http/dto"
+	"stockflow/internal/domain"
 	"stockflow/internal/service"
 )
 
@@ -30,14 +31,23 @@ func (h *OrderHandler) Create(c echo.Context) error {
 		items = append(items, service.OrderItemInput{SKU: item.SKU, Qty: qty})
 	}
 
-	order, err := h.service.Create(c.Request().Context(), service.CreateOrderInput{
-		Customer: req.Customer,
-		Items:    items,
-	})
+	input := service.CreateOrderInput{Customer: req.Customer, Items: items}
+
+	var order domain.SalesOrder
+	var replayed bool
+	var err error
+	if keys := c.Request().Header.Values("Idempotency-Key"); len(keys) > 0 {
+		order, replayed, err = h.service.CreateIdempotent(c.Request().Context(), keys[0], input)
+	} else {
+		order, err = h.service.Create(c.Request().Context(), input)
+	}
 	if err != nil {
 		return err
 	}
 
+	if replayed {
+		c.Response().Header().Set("Idempotent-Replay", "true")
+	}
 	return c.JSON(nethttp.StatusCreated, dto.NewOrderResponse(order))
 }
 

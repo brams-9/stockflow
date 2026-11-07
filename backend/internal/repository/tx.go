@@ -3,10 +3,11 @@ package repository
 import "context"
 
 type Repositories struct {
-	Products  ProductRepository
-	Stock     StockRepository
-	Movements MovementRepository
-	Orders    OrderRepository
+	Products    ProductRepository
+	Stock       StockRepository
+	Movements   MovementRepository
+	Orders      OrderRepository
+	Idempotency IdempotencyRepository
 }
 
 type TxRunner interface {

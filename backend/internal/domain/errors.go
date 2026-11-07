@@ -13,6 +13,7 @@ var (
 	ErrOrderNotFound         = errors.New("order not found")
 	ErrOrderAlreadyCancelled = errors.New("order already cancelled")
 	ErrStockOverflow         = errors.New("stock would exceed the maximum")
+	ErrIdempotencyKeyReused  = errors.New("idempotency key reused with a different request")
 )
 
 type ValidationError struct {

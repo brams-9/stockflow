@@ -8,6 +8,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type IdempotencyKey struct {
+	Key         string
+	RequestHash string
+	OrderID     pgtype.Int4
+	CreatedAt   pgtype.Timestamptz
+}
+
 type Product struct {
 	ID        int32
 	Sku       string

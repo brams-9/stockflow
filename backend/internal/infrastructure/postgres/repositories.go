@@ -12,10 +12,11 @@ import (
 func NewRepositories(db sqlc.DBTX) repository.Repositories {
 	queries := sqlc.New(db)
 	return repository.Repositories{
-		Products:  NewProductRepository(queries),
-		Stock:     NewStockRepository(queries),
-		Movements: NewMovementRepository(queries),
-		Orders:    NewOrderRepository(queries),
+		Products:    NewProductRepository(queries),
+		Stock:       NewStockRepository(queries),
+		Movements:   NewMovementRepository(queries),
+		Orders:      NewOrderRepository(queries),
+		Idempotency: NewIdempotencyRepository(queries),
 	}
 }
 
