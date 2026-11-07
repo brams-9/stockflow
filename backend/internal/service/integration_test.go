@@ -55,6 +55,7 @@ func newFixture(t *testing.T) *fixture {
 
 func (f *fixture) cleanup() {
 	ctx := context.Background()
+	f.pool.Exec(ctx, `DELETE FROM idempotency_keys WHERE key LIKE $1`, f.prefix+"%")
 	f.pool.Exec(ctx, `DELETE FROM sales_order_items WHERE sku = ANY($1)`, f.skus)
 	f.pool.Exec(ctx, `DELETE FROM sales_orders WHERE customer LIKE $1`, f.prefix+"%")
 	f.pool.Exec(ctx, `DELETE FROM stock_movements WHERE product_id IN (SELECT id FROM products WHERE sku = ANY($1))`, f.skus)
@@ -255,5 +256,107 @@ func TestConcurrentOrdersNeverOversell(t *testing.T) {
 	}
 	if got := f.stockOf(a.SKU); got != 0 {
 		t.Errorf("final stock is %d, want 0", got)
+	}
+}
+
+func TestIdempotentOrdersCollapseToOne(t *testing.T) {
+	f := newFixture(t)
+	a := f.product("A", 1000, 10)
+	key := f.prefix + "-key"
+
+	const attempts = 10
+	ids := make([]int, attempts)
+	replays := make([]bool, attempts)
+	errs := make([]error, attempts)
+
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			order, replayed, err := f.orders.CreateIdempotent(context.Background(), key, service.CreateOrderInput{
+				Customer: f.prefix + "-customer",
+				Items:    []service.OrderItemInput{{SKU: a.SKU, Qty: 3}},
+			})
+			ids[i], replays[i], errs[i] = order.ID, replayed, err
+		}(i)
+	}
+	wg.Wait()
+
+	fresh := 0
+	for i := 0; i < attempts; i++ {
+		if errs[i] != nil {
+			t.Fatalf("attempt %d failed: %v", i, errs[i])
+		}
+		if ids[i] != ids[0] {
+			t.Errorf("attempt %d returned order %d, want %d", i, ids[i], ids[0])
+		}
+		if !replays[i] {
+			fresh++
+		}
+	}
+	if fresh != 1 {
+		t.Errorf("got %d non-replayed responses, want 1", fresh)
+	}
+	if got := f.stockOf(a.SKU); got != 7 {
+		t.Errorf("stock is %d, want 7", got)
+	}
+	if n := f.count(`SELECT count(*) FROM sales_orders WHERE customer = $1`, f.prefix+"-customer"); n != 1 {
+		t.Errorf("got %d orders, want 1", n)
+	}
+	if n := f.count(`SELECT count(*) FROM stock_movements WHERE product_id = $1 AND type = 'out'`, a.ID); n != 1 {
+		t.Errorf("got %d out movements, want 1", n)
+	}
+}
+
+func TestIdempotencyKeyWithDifferentPayloadIsRejected(t *testing.T) {
+	f := newFixture(t)
+	a := f.product("A", 1000, 10)
+	key := f.prefix + "-key"
+	ctx := context.Background()
+
+	if _, _, err := f.orders.CreateIdempotent(ctx, key, service.CreateOrderInput{
+		Customer: f.prefix + "-customer",
+		Items:    []service.OrderItemInput{{SKU: a.SKU, Qty: 2}},
+	}); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+
+	_, _, err := f.orders.CreateIdempotent(ctx, key, service.CreateOrderInput{
+		Customer: f.prefix + "-customer",
+		Items:    []service.OrderItemInput{{SKU: a.SKU, Qty: 4}},
+	})
+	if !errors.Is(err, domain.ErrIdempotencyKeyReused) {
+		t.Fatalf("expected ErrIdempotencyKeyReused, got %v", err)
+	}
+	if got := f.stockOf(a.SKU); got != 8 {
+		t.Errorf("stock is %d, want 8", got)
+	}
+}
+
+func TestIdempotencyKeyFreedWhenOrderFails(t *testing.T) {
+	f := newFixture(t)
+	a := f.product("A", 1000, 2)
+	key := f.prefix + "-key"
+	ctx := context.Background()
+
+	_, _, err := f.orders.CreateIdempotent(ctx, key, service.CreateOrderInput{
+		Customer: f.prefix + "-customer",
+		Items:    []service.OrderItemInput{{SKU: a.SKU, Qty: 5}},
+	})
+	var insufficient *domain.InsufficientStockError
+	if !errors.As(err, &insufficient) {
+		t.Fatalf("expected insufficient stock, got %v", err)
+	}
+	if n := f.count(`SELECT count(*) FROM idempotency_keys WHERE key = $1`, key); n != 0 {
+		t.Errorf("failed attempt left %d keys behind", n)
+	}
+
+	order, replayed, err := f.orders.CreateIdempotent(ctx, key, service.CreateOrderInput{
+		Customer: f.prefix + "-customer",
+		Items:    []service.OrderItemInput{{SKU: a.SKU, Qty: 2}},
+	})
+	if err != nil || replayed || order.ID == 0 {
+		t.Fatalf("retry: order=%+v replayed=%v err=%v", order, replayed, err)
 	}
 }
