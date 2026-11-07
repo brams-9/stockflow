@@ -33,10 +33,14 @@ func main() {
 	}
 	log.Println("database connection ok")
 
-	productService := service.NewProductService(postgres.NewProductRepository(pool))
-	productHandler := handler.NewProductHandler(productService)
+	repos := postgres.NewRepositories(pool)
+	txRunner := postgres.NewTxRunner(pool)
 
-	router := delivery.NewRouter(productHandler)
+	productHandler := handler.NewProductHandler(service.NewProductService(repos.Products))
+	stockHandler := handler.NewStockHandler(service.NewStockService(repos, txRunner))
+	orderHandler := handler.NewOrderHandler(service.NewOrderService(repos, txRunner))
+
+	router := delivery.NewRouter(productHandler, stockHandler, orderHandler)
 	if err := router.Start(":" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}

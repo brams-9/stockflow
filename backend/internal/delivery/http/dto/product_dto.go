@@ -58,3 +58,10 @@ func NewProductListResponse(products []domain.Product, page, limit, total int) P
 func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }
+
+type UpdateProductRequest struct {
+	SKU      string `json:"sku"`
+	Name     string `json:"name"`
+	Price    *int   `json:"price"`
+	IsActive *bool  `json:"is_active"`
+}

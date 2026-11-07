@@ -1,15 +1,12 @@
 package handler
 
 import (
-	"encoding/json"
-	"errors"
 	nethttp "net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 
 	"stockflow/internal/delivery/http/dto"
-	"stockflow/internal/domain"
 	"stockflow/internal/service"
 )
 
@@ -35,8 +32,8 @@ func (h *ProductHandler) List(c echo.Context) error {
 
 func (h *ProductHandler) Create(c echo.Context) error {
 	var req dto.CreateProductRequest
-	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
-		return decodeError(err)
+	if err := decodeJSON(c, &req); err != nil {
+		return err
 	}
 
 	product, err := h.service.Create(c.Request().Context(), service.CreateProductInput{
@@ -51,17 +48,39 @@ func (h *ProductHandler) Create(c echo.Context) error {
 	return c.JSON(nethttp.StatusCreated, dto.NewProductResponse(product))
 }
 
-func decodeError(err error) error {
-	var typeErr *json.UnmarshalTypeError
-	if errors.As(err, &typeErr) {
-		message := "must be a string"
-		if typeErr.Field == "price" {
-			message = "must be a non-negative integer"
-		}
-		return &domain.ValidationError{
-			Message: "validation failed",
-			Fields:  map[string]string{typeErr.Field: message},
-		}
+func (h *ProductHandler) Update(c echo.Context) error {
+	id, err := parseID(c)
+	if err != nil {
+		return err
 	}
-	return &domain.ValidationError{Message: "request body must be valid JSON"}
+
+	var req dto.UpdateProductRequest
+	if err := decodeJSON(c, &req); err != nil {
+		return err
+	}
+
+	product, err := h.service.Update(c.Request().Context(), id, service.UpdateProductInput{
+		SKU:      req.SKU,
+		Name:     req.Name,
+		Price:    req.Price,
+		IsActive: req.IsActive,
+	})
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(nethttp.StatusOK, dto.NewProductResponse(product))
+}
+
+func (h *ProductHandler) Delete(c echo.Context) error {
+	id, err := parseID(c)
+	if err != nil {
+		return err
+	}
+
+	if err := h.service.Delete(c.Request().Context(), id); err != nil {
+		return err
+	}
+
+	return c.NoContent(nethttp.StatusNoContent)
 }

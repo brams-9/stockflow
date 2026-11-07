@@ -51,6 +51,59 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 	return i, err
 }
 
+const deleteProduct = `-- name: DeleteProduct :execrows
+DELETE FROM products WHERE id = $1
+`
+
+func (q *Queries) DeleteProduct(ctx context.Context, id int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteProduct, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getProductByID = `-- name: GetProductByID :one
+SELECT
+    p.id,
+    p.sku,
+    p.name,
+    p.price,
+    p.stock,
+    p.is_active,
+    p.created_at,
+    (SELECT MAX(m.created_at) FROM stock_movements m WHERE m.product_id = p.id)::timestamptz AS last_movement_at
+FROM products p
+WHERE p.id = $1
+`
+
+type GetProductByIDRow struct {
+	ID             int32
+	Sku            string
+	Name           string
+	Price          int32
+	Stock          int32
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	LastMovementAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetProductByID(ctx context.Context, id int32) (GetProductByIDRow, error) {
+	row := q.db.QueryRow(ctx, getProductByID, id)
+	var i GetProductByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sku,
+		&i.Name,
+		&i.Price,
+		&i.Stock,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.LastMovementAt,
+	)
+	return i, err
+}
+
 const listProducts = `-- name: ListProducts :many
 SELECT
     p.id,
@@ -111,4 +164,51 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]L
 		return nil, err
 	}
 	return items, nil
+}
+
+const productHasHistory = `-- name: ProductHasHistory :one
+SELECT (
+    EXISTS (SELECT 1 FROM stock_movements WHERE product_id = $1)
+    OR EXISTS (
+        SELECT 1
+        FROM sales_order_items i
+        JOIN products p ON p.sku = i.sku
+        WHERE p.id = $1
+    )
+)::boolean AS has_history
+`
+
+func (q *Queries) ProductHasHistory(ctx context.Context, id int32) (bool, error) {
+	row := q.db.QueryRow(ctx, productHasHistory, id)
+	var has_history bool
+	err := row.Scan(&has_history)
+	return has_history, err
+}
+
+const updateProduct = `-- name: UpdateProduct :execrows
+UPDATE products
+SET sku = $2, name = $3, price = $4, is_active = $5
+WHERE id = $1
+`
+
+type UpdateProductParams struct {
+	ID       int32
+	Sku      string
+	Name     string
+	Price    int32
+	IsActive bool
+}
+
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateProduct,
+		arg.ID,
+		arg.Sku,
+		arg.Name,
+		arg.Price,
+		arg.IsActive,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

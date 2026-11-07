@@ -28,6 +28,13 @@ type CreateProductInput struct {
 	Price *int
 }
 
+type UpdateProductInput struct {
+	SKU      string
+	Name     string
+	Price    *int
+	IsActive *bool
+}
+
 type ProductService struct {
 	repo repository.ProductRepository
 }
@@ -59,6 +66,39 @@ func (s *ProductService) Create(ctx context.Context, input CreateProductInput) (
 	sku := strings.TrimSpace(input.SKU)
 	name := strings.TrimSpace(input.Name)
 
+	if fields := validateProductFields(sku, name, input.Price); len(fields) > 0 {
+		return domain.Product{}, &domain.ValidationError{Message: "validation failed", Fields: fields}
+	}
+
+	return s.repo.Create(ctx, domain.Product{SKU: sku, Name: name, Price: *input.Price})
+}
+
+func (s *ProductService) Update(ctx context.Context, id int, input UpdateProductInput) (domain.Product, error) {
+	sku := strings.TrimSpace(input.SKU)
+	name := strings.TrimSpace(input.Name)
+
+	fields := validateProductFields(sku, name, input.Price)
+	if input.IsActive == nil {
+		fields["is_active"] = "required"
+	}
+	if len(fields) > 0 {
+		return domain.Product{}, &domain.ValidationError{Message: "validation failed", Fields: fields}
+	}
+
+	return s.repo.Update(ctx, domain.Product{
+		ID:       id,
+		SKU:      sku,
+		Name:     name,
+		Price:    *input.Price,
+		IsActive: *input.IsActive,
+	})
+}
+
+func (s *ProductService) Delete(ctx context.Context, id int) error {
+	return s.repo.Delete(ctx, id)
+}
+
+func validateProductFields(sku, name string, price *int) map[string]string {
 	fields := map[string]string{}
 	if sku == "" {
 		fields["sku"] = "required"
@@ -67,16 +107,12 @@ func (s *ProductService) Create(ctx context.Context, input CreateProductInput) (
 		fields["name"] = "required"
 	}
 	switch {
-	case input.Price == nil:
+	case price == nil:
 		fields["price"] = "required"
-	case *input.Price < 0:
+	case *price < 0:
 		fields["price"] = "must be a non-negative integer"
-	case *input.Price > math.MaxInt32:
+	case *price > math.MaxInt32:
 		fields["price"] = "must not exceed 2147483647"
 	}
-	if len(fields) > 0 {
-		return domain.Product{}, &domain.ValidationError{Message: "validation failed", Fields: fields}
-	}
-
-	return s.repo.Create(ctx, domain.Product{SKU: sku, Name: name, Price: *input.Price})
+	return fields
 }
