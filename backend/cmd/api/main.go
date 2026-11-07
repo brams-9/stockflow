@@ -6,6 +6,7 @@ import (
 	"time"
 
 	delivery "stockflow/internal/delivery/http"
+	"stockflow/internal/delivery/http/handler"
 	"stockflow/internal/infrastructure/config"
 	"stockflow/internal/infrastructure/postgres"
 	"stockflow/internal/service"
@@ -32,7 +33,10 @@ func main() {
 	}
 	log.Println("database connection ok")
 
-	router := delivery.NewRouter()
+	productService := service.NewProductService(postgres.NewProductRepository(pool))
+	productHandler := handler.NewProductHandler(productService)
+
+	router := delivery.NewRouter(productHandler)
 	if err := router.Start(":" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}
