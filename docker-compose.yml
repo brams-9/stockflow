@@ -18,14 +18,27 @@ services:
   migrate:
     image: migrate/migrate:v4.18.1
     volumes:
-      - ./db/migrations:/migrations
+      - ./backend/db/migrations:/migrations
     command: ["-path", "/migrations", "-database", "postgres://stockflow:stockflow@db:5432/stockflow?sslmode=disable", "up"]
     depends_on:
       db:
         condition: service_healthy
 
+  seed:
+    image: postgres:17-alpine
+    environment:
+      PGPASSWORD: stockflow
+    volumes:
+      - ./backend/db/seed:/seed
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "-h", "db", "-U", "stockflow", "-d", "stockflow", "-f", "/seed/seed.sql"]
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
   api:
-    build: .
+    build: ./backend
     environment:
       PORT: 8080
       DATABASE_URL: postgres://stockflow:stockflow@db:5432/stockflow?sslmode=disable
@@ -34,8 +47,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      migrate:
+      seed:
         condition: service_completed_successfully
+
+  web:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
 
 volumes:
   pgdata:
