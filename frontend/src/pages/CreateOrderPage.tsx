@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import ErrorState from '../components/ErrorState'
 import { useCreateOrder } from '../domains/order/queries'
 import { useAllProducts } from '../domains/product/queries'
+import { useIdempotencyKey } from '../hooks/useIdempotencyKey'
 import { ApiError } from '../lib/apiClient'
 import { errorCodes } from '../types/api'
 import { formatRupiah } from '../utils/format'
@@ -20,6 +21,7 @@ export default function CreateOrderPage() {
   const navigate = useNavigate()
   const products = useAllProducts()
   const createOrder = useCreateOrder()
+  const idempotency = useIdempotencyKey()
 
   const [customer, setCustomer] = useState('')
   const [lines, setLines] = useState<OrderLine[]>([emptyLine()])
@@ -29,7 +31,18 @@ export default function CreateOrderPage() {
 
   const options = (products.data?.data ?? []).filter((product) => product.is_active)
 
+  const updateCustomer = (value: string) => {
+    setCustomer(value)
+    idempotency.reset()
+  }
+
+  const addLine = () => {
+    setLines((current) => [...current, emptyLine()])
+    idempotency.reset()
+  }
+
   const updateLine = (index: number, patch: Partial<OrderLine>) => {
+    idempotency.reset()
     setLines((current) =>
       current.map((line, position) => (position === index ? { ...line, ...patch } : line)),
     )
@@ -37,6 +50,7 @@ export default function CreateOrderPage() {
   }
 
   const removeLine = (index: number) => {
+    idempotency.reset()
     setLines((current) => current.filter((_, position) => position !== index))
     setErrors({ lines: {} })
     setShortage(undefined)
@@ -53,17 +67,26 @@ export default function CreateOrderPage() {
 
     createOrder.mutate(
       {
-        customer: customer.trim(),
-        items: lines.map((line) => ({ sku: line.sku, qty: Number(line.qty) })),
+        input: {
+          customer: customer.trim(),
+          items: lines.map((line) => ({ sku: line.sku, qty: Number(line.qty) })),
+        },
+        idempotencyKey: idempotency.get(),
       },
       {
-        onSuccess: (order) => navigate(`/orders/${order.id}`),
+        onSuccess: (order) => {
+          idempotency.reset()
+          navigate(`/orders/${order.id}`)
+        },
         onError: (error) => {
           if (!(error instanceof ApiError)) {
             setFormError(error.message)
           } else if (error.code === errorCodes.insufficientStock && error.sku) {
             setShortage({ sku: error.sku, available: error.available ?? 0 })
             setFormError(error.message)
+          } else if (error.code === errorCodes.idempotencyKeyReused) {
+            idempotency.reset()
+            setFormError('This order changed, please submit again')
           } else if (error.code === errorCodes.validation && error.fields) {
             setErrors(mapServerFields(error.fields))
             setFormError(error.message)
@@ -92,7 +115,7 @@ export default function CreateOrderPage() {
             <span className="field-label">Customer</span>
             <input
               value={customer}
-              onChange={(event) => setCustomer(event.target.value)}
+              onChange={(event) => updateCustomer(event.target.value)}
               aria-invalid={Boolean(errors.customer)}
             />
             {errors.customer && <span className="field-error">{errors.customer}</span>}
@@ -154,7 +177,7 @@ export default function CreateOrderPage() {
             <button
               type="button"
               className="btn btn-small"
-              onClick={() => setLines((current) => [...current, emptyLine()])}
+              onClick={addLine}
             >
               Add item
             </button>

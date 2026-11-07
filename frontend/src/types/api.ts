@@ -8,6 +8,7 @@ export const errorCodes = {
   insufficientStock: 'INSUFFICIENT_STOCK',
   orderNotFound: 'ORDER_NOT_FOUND',
   orderAlreadyCancelled: 'ORDER_ALREADY_CANCELLED',
+  idempotencyKeyReused: 'IDEMPOTENCY_KEY_REUSED',
   notFound: 'NOT_FOUND',
   methodNotAllowed: 'METHOD_NOT_ALLOWED',
   internal: 'INTERNAL_ERROR',

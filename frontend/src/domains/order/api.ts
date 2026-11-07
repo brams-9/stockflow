@@ -1,11 +1,12 @@
 import { request } from '../../lib/apiClient'
 import { orderSchema, type CreateOrderInput, type Order } from '../../types/api'
 
-export const createOrder = (input: CreateOrderInput): Promise<Order> =>
+export const createOrder = (input: CreateOrderInput, idempotencyKey: string): Promise<Order> =>
   request({
     method: 'POST',
     path: '/api/orders',
     body: input,
+    headers: { 'Idempotency-Key': idempotencyKey },
     schema: orderSchema,
   })
 

@@ -17,6 +17,7 @@ type RequestOptions<T extends z.ZodType> = {
   schema: T
   query?: Record<string, QueryValue>
   body?: unknown
+  headers?: Record<string, string>
 }
 
 type ApiErrorInit = {
@@ -54,6 +55,11 @@ const buildUrl = (path: string, query?: Record<string, QueryValue>) => {
   }
   const search = params.toString()
   return `${baseUrl}${path}${search ? `?${search}` : ''}`
+}
+
+const buildHeaders = (body: unknown, extra?: Record<string, string>) => {
+  const headers: Record<string, string> = body === undefined ? {} : { 'Content-Type': 'application/json' }
+  return { ...headers, ...extra }
 }
 
 const readJson = async (res: Response): Promise<unknown> => {
@@ -96,12 +102,13 @@ export async function request<T extends z.ZodType>({
   schema,
   query,
   body,
+  headers,
 }: RequestOptions<T>): Promise<z.infer<T>> {
   let res: Response
   try {
     res = await fetch(buildUrl(path, query), {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers: buildHeaders(body, headers),
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {

@@ -16,7 +16,8 @@ export const useOrder = (id: number) =>
 export const useCreateOrder = () => {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: CreateOrderInput) => createOrder(input),
+    mutationFn: ({ input, idempotencyKey }: { input: CreateOrderInput; idempotencyKey: string }) =>
+      createOrder(input, idempotencyKey),
     onSuccess: (order) => {
       queryClient.setQueryData(orderKeys.detail(order.id), order)
       return queryClient.invalidateQueries({ queryKey: productKeys.all })
